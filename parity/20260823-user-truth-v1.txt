@@ -1,0 +1,10 @@
+J FORTITUDE CANONICAL FRONTEND PARITY PROOF
+contract=20260823-user-truth-v1
+routing=tutoring-not-universal-home
+board_identity=canonical-roster-only
+educator_marketplace=verification-required
+measurement=fail-closed
+mission_reliability=all-required-factors
+meta_health=api-first
+user_friction=ratcheted
+source=J-Fortitude-Legacy-Institute/grantflow-gateway

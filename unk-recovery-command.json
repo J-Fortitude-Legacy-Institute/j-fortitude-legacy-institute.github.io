@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "active": true,
+  "command_id": "resource-controls-recovery-2026-08-26",
+  "issued_at": "2026-08-26T20:18:00Z",
+  "expires_at": "2026-08-30T05:00:00Z",
+  "target_device_id": "*",
+  "action": "open_control_surfaces",
+  "urls": [
+    "https://github.com/settings/billing",
+    "https://github.com/J-Fortitude-Legacy-Institute/grantflow-gateway/actions",
+    "https://www.firecrawl.dev/app"
+  ],
+  "reason": "Restore resource-control visibility for exhausted GitHub Actions minutes and conserve Firecrawl credits. Human approval remains required for any billing or plan purchase."
+}

@@ -1,0 +1,1 @@
+function r(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"}catch{return"UTC"}}function a(e){const t=r();return!e||e===t?"Your local time":`Your local time · educator listed ${e}`}export{r as d,a as m};

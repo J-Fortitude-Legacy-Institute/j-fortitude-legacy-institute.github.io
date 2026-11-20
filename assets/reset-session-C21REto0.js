@@ -1,0 +1,1 @@
+const r="reset:lastRegistration";function a(e){try{const t={...e,savedAt:Date.now()};localStorage.setItem(r,JSON.stringify(t))}catch{}}function n(){try{const e=localStorage.getItem(r);if(!e)return null;const t=JSON.parse(e);return t!=null&&t.regId?t:null}catch{return null}}function o(){try{localStorage.removeItem(r)}catch{}}export{a,o as f,n as r};

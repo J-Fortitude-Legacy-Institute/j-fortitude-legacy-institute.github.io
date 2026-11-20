@@ -1,0 +1,1 @@
+import{s as o}from"./index-i1ORIpEg.js";const s=o;async function n(t){const{data:a}=await s.from("material_change_order_drafts").select("status, unlocks_payout").eq("linked_job_id",t).in("status",["approved","waived"]).eq("unlocks_payout",!0).limit(1);return(a??[]).length>0}export{n as hasApprovedPayoutUnlock};

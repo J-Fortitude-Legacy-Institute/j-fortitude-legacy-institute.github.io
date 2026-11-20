@@ -1,0 +1,13 @@
+J FORTITUDE CARPENTRY REVIEW OUTCOME GATE DEPLOYMENT PROOF
+contract=carpentry-review-outcome-gate-20260919-v1
+source_pr=650
+source_merge=33401640cddccdc6ca4fd3c432bcb6696f82709a
+review_outcomes=approved,needs_revision
+needs_revision_unlocks_downstream=false
+verified_reviewer_required=true
+creates_worker_qualification=false
+creates_osha_nccer_authority=false
+creates_trainer_authority=false
+creates_assignment=false
+creates_pay=false
+purpose=immutable user-side proof that the explicit Carpentry curriculum review outcome UI bundle has reached this deployed Pages artifact

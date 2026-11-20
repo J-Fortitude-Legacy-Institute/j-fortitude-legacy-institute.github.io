@@ -1,0 +1,1 @@
+import{c5 as a,aa as r,j as t,dG as n}from"./index-i1ORIpEg.js";function i(){const{id:e}=a(),o=r();return e?t.jsx(n,{to:`/grant-engine/opportunities/${encodeURIComponent(e)}${o.search}`,replace:!0}):t.jsx(n,{to:"/grant-engine/opportunities",replace:!0})}export{i as default};
