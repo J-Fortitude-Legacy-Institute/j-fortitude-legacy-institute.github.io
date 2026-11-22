@@ -1,0 +1,1 @@
+import{c2 as a,aa as r,j as t,dD as n}from"./index-CyuDsdKB.js";function i(){const{id:e}=a(),o=r();return e?t.jsx(n,{to:`/grant-engine/opportunities/${encodeURIComponent(e)}${o.search}`,replace:!0}):t.jsx(n,{to:"/grant-engine/opportunities",replace:!0})}export{i as default};

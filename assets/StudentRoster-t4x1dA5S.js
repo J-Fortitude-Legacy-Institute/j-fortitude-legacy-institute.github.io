@@ -1,0 +1,1 @@
+import{j as r}from"./index-Cml54DvC.js";import t from"./TeacherDashboard-B-byeQJR.js";import"./WelcomeBackBanner-BbkP7jTn.js";import"./activity-recovery-BC7zysT8.js";import"./history-BBROQWEB.js";import"./placement-score-VF_QbPWb.js";function a(){return r.jsx(t,{})}export{a as default};

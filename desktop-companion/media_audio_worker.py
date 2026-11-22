@@ -2,7 +2,7 @@
 Companion audio-extract worker.
 
 Zero-secret design: uses only SUPABASE_ANON_KEY (already baked into the
-companion). Server-side edge functions hold the Drive + Lovable keys.
+companion). Project K Edge Functions hold direct Drive credentials; no Lovable runtime.
 
 Loop:
   1. POST /functions/v1/unk-media-audio-authorize -> claim an asset
@@ -30,9 +30,6 @@ import argparse, json, os, re, subprocess, sys, tempfile, time
 from pathlib import Path
 
 import requests
-
-# Resolve verified FFmpeg paths at execution, not at module import.
-
 # --- Unk window policy: never flash a console window, never steal focus ---
 try:
     from unk_window_policy import install_quiet_subprocess as _install_quiet_subprocess, browser_args as _win_browser_args
@@ -47,6 +44,7 @@ BASE = f"https://{PROJECT_REF}.functions.supabase.co"
 ANON = os.environ.get("SUPABASE_ANON_KEY", "").strip() or "sb_publishable_71YhGNn088MamieIZXBAaw_kv3w4wc9"
 WORKER_ID = os.environ.get("MEDIA_AUDIO_WORKER_ID", "unk-audio-01")
 RANGE_BYTES = 128 * 1024 * 1024  # 128 MB per download call
+MIN_RANGE_BYTES = 8 * 1024 * 1024  # bounded retry floor for K Storage 500s
 STORAGE_UPLOAD = f"https://{PROJECT_REF}.supabase.co/storage/v1/upload/sign"
 
 
@@ -76,41 +74,48 @@ def post(path: str, body: dict, stream: bool = False, timeout: int = 180):
     return r
 
 
-def download_full(asset_id: str, size_bytes: int, dst: Path) -> None:
-    """Stream only independently validated, exact-size byte ranges.
+def download_full(asset_id: str, size_bytes: int, dst: Path, source_mode: str = "original", source_mirror_path: str | None = None) -> None:
+    """Stream exact verified ranges, downsizing only after a bounded failure.
 
-    A CDN, Drive connector, or Storage route may return 200 for an ignored
-    Range header, a truncated 206, or a contradictory Content-Range. Do not
-    count any of those responses as a complete original-media transfer.
+    Some archived Project K Storage objects return HTTP 500 for 128 MiB ranges
+    while other K objects accept them. Smaller requests reuse the SAME source
+    identity and original claim; an unverified byte is never appended.
     """
     if size_bytes <= 0:
         raise RuntimeError("source byte size missing")
+    range_bytes = RANGE_BYTES
     with open(dst, "wb") as f:
         start = 0
         while start < size_bytes:
-            end = min(start + RANGE_BYTES - 1, size_bytes - 1)
+            end = min(start + range_bytes - 1, size_bytes - 1)
             expected = end - start + 1
+            completed = False
+            last_error: Exception | None = None
             for attempt in range(3):
+                response = None
                 try:
-                    r = post(
+                    response = post(
                         "/unk-media-drive-range",
-                        {"asset_id": asset_id, "byte_start": start, "byte_end": end},
+                        {"asset_id": asset_id, "byte_start": start, "byte_end": end,
+                         "source_mode": source_mode, "source_mirror_path": source_mirror_path},
                         stream=True, timeout=180,
                     )
-                    if r.status_code == 206:
+                    if source_mode == "mirror_derivative" and response.headers.get("X-Range-Source") != "mirror_derivative":
+                        raise RuntimeError("derivative source identity not acknowledged")
+                    if response.status_code == 206:
                         match = re.fullmatch(
                             r"bytes (\d+)-(\d+)/(\d+)",
-                            r.headers.get("Content-Range", ""),
+                            response.headers.get("Content-Range", ""),
                         )
                         if not match or tuple(map(int, match.groups())) != (start, end, size_bytes):
                             raise RuntimeError("range identity does not match source")
-                    elif r.status_code != 200 or start != 0 or end != size_bytes - 1:
-                        raise RuntimeError(f"range response not complete: HTTP {r.status_code}")
-                    # Retry cannot append to bytes from a previous failed attempt.
+                    elif response.status_code != 200 or start != 0 or end != size_bytes - 1:
+                        raise RuntimeError(f"range response not complete: HTTP {response.status_code}")
+                    # A partial failed stream cannot contaminate the next attempt.
                     f.seek(start)
                     f.truncate(start)
                     copied = 0
-                    for buf in r.iter_content(chunk_size=1024 * 1024):
+                    for buf in response.iter_content(chunk_size=1024 * 1024):
                         if buf:
                             copied += len(buf)
                             if copied > expected:
@@ -119,13 +124,30 @@ def download_full(asset_id: str, size_bytes: int, dst: Path) -> None:
                     if copied != expected:
                         raise RuntimeError("range body shorter than verified source")
                     start = end + 1
+                    completed = True
                     break
                 except Exception as exc:
+                    last_error = exc
                     f.seek(start)
                     f.truncate(start)
-                    if attempt == 2:
-                        raise RuntimeError(f"range {start}-{end} not verified after 3 attempts") from exc
-                    time.sleep(2 * (attempt + 1))
+                    if attempt < 2:
+                        time.sleep(2 * (attempt + 1))
+                finally:
+                    if response is not None:
+                        response.close()
+            if completed:
+                continue
+            # Never skip a byte or combine original and derivative identities.
+            # An exact same-source retry at reduced size can recover Storage
+            # gateways that reject large Range responses. Keep it bounded:
+            # 128 MiB -> 32 MiB -> 8 MiB, three tries at each size.
+            if range_bytes <= MIN_RANGE_BYTES:
+                raise RuntimeError(f"range {start}-{end} not verified after size fallback") from last_error
+            smaller = max(MIN_RANGE_BYTES, range_bytes // 4)
+            if smaller >= range_bytes:
+                raise RuntimeError("range fallback could not decrease size") from last_error
+            range_bytes = smaller
+            print(f"[audio] range verification failed; retrying smaller {range_bytes}-byte requests", flush=True)
 
 
 def _media_binaries() -> tuple[str, str]:
@@ -205,18 +227,30 @@ def process_one() -> bool:
     if job.get("empty"):
         return False
     asset_id = job["asset_id"]
-    size_bytes = int(job.get("size_bytes") or 0)
+    original_bytes = int(job.get("size_bytes") or 0)
+    source_mode = job.get("source_mode", "original")
+    if source_mode not in ("original", "mirror_derivative"):
+        post("/unk-media-audio-report", {"asset_id": asset_id, "mode": "failed", "error": "unknown source mode"})
+        return False
+    source_mirror_path = job.get("source_mirror_path")
+    if source_mode == "mirror_derivative" and not isinstance(source_mirror_path, str):
+        post("/unk-media-audio-report", {"asset_id": asset_id, "mode": "failed", "error": "derivative source path missing"})
+        return False
+    size_bytes = int(job.get("source_size_bytes") or original_bytes)
+    if source_mode == "mirror_derivative" and not (0 < size_bytes < original_bytes):
+        post("/unk-media-audio-report", {"asset_id": asset_id, "mode": "failed", "error": "derivative byte identity missing"})
+        return False
     if not size_bytes:
         post("/unk-media-audio-report", {"asset_id": asset_id, "mode": "failed", "error": "size_bytes unknown"})
         return True
 
-    print(f"[audio] claimed {asset_id} ({job.get('file_name')}, {size_bytes/1e9:.2f} GB)", flush=True)
+    print(f"[audio] claimed {asset_id} ({job.get('file_name')}, {size_bytes/1e9:.2f} GB, source={source_mode})", flush=True)
     with tempfile.TemporaryDirectory(prefix=f"unk_audio_{asset_id[:8]}_") as tmp:
         tmpd = Path(tmp)
         src = tmpd / "source.bin"
         try:
             print("[audio]  downloading...", flush=True)
-            download_full(asset_id, size_bytes, src)
+            download_full(asset_id, size_bytes, src, source_mode=source_mode, source_mirror_path=source_mirror_path)
             print("[audio]  extracting audio...", flush=True)
             segs = ffmpeg_extract(src, tmpd)
             src.unlink(missing_ok=True)
@@ -230,7 +264,8 @@ def process_one() -> bool:
                     "duration_seconds": int(probe_duration(p)),
                 })
             code, resp = post("/unk-media-audio-report", {
-                "asset_id": asset_id, "mode": "chunks_done", "chunks": chunk_meta,
+                "asset_id": asset_id, "mode": "chunks_done", "chunks": chunk_meta, "source_mode": source_mode,
+                "source_mirror_path": source_mirror_path,
             })
             if code != 200:
                 raise RuntimeError(f"chunks_done failed: {code} {resp}")
@@ -240,6 +275,7 @@ def process_one() -> bool:
             post("/unk-media-audio-report", {
                 "asset_id": asset_id, "mode": "failed", "error": str(e)[:400],
             })
+            return False  # A failed task is not progress; honor loop backoff.
     return True
 
 

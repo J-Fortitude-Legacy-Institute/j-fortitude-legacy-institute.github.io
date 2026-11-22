@@ -1,0 +1,10 @@
+import{r as o,s as f}from"./index-Cml54DvC.js";const l="<!--user-sig-->";function m(e){var i,s,a,c,n;if(!e)return"";const r=[e.first_name,e.last_name].filter(Boolean).join(" ").trim()||((i=e.display_name)==null?void 0:i.trim())||"";if(!r)return"";const t=[r];return(s=e.title)!=null&&s.trim()&&t.push(e.title.trim()),(a=e.organization)!=null&&a.trim()&&t.push(e.organization.trim()),(c=e.signature_email)!=null&&c.trim()&&t.push(e.signature_email.trim()),(n=e.signature_phone)!=null&&n.trim()&&t.push(e.signature_phone.trim()),t.join(`
+`)}function S(e,r,t={}){if(!r||!t.force&&r.signature_enabled!==!0)return e;const i=m(r);if(!i||e.includes(l))return e;const s=e.endsWith(`
+
+`)?"":e.endsWith(`
+`)?`
+`:`
+
+`;return`${e}${s}--
+${i}
+${l}`}function h(e){const r=e.indexOf(l);return r===-1?e:e.slice(0,r).replace(/\n*--\n[\s\S]*$/,"").replace(/\s+$/,"")}function _(e){const r={...e};let t=0;for(const i of Object.keys(r)){const s=r[i];typeof s=="string"&&s.includes(l)&&(r[i]=h(s),t++)}return{result:r,stripped:t}}async function g(){var a;const{data:e,error:r}=await f.auth.getUser();if(r)throw new Error(`Could not verify current signer identity: ${r.message}`);const t=(a=e.user)==null?void 0:a.id;if(!t)return null;const{data:i,error:s}=await f.from("profiles").select("first_name,last_name,title,organization,signature_phone,signature_email,signature_enabled,display_name").eq("user_id",t).maybeSingle();if(s)throw new Error(`Could not verify current signature preference: ${s.message}`);return i||null}function p(){const[e,r]=o.useState(null),[t,i]=o.useState(!0),[s,a]=o.useState(null);return o.useEffect(()=>{let n=!0;return g().then(u=>{n&&(r(u),a(null))}).catch(u=>{n&&(r(null),a(u instanceof Error?u.message:"Signature evidence unavailable"))}).finally(()=>{n&&i(!1)}),()=>{n=!1}},[]),{signature:e,loading:t,error:s,refresh:async()=>{try{const n=await g();return r(n),a(null),n}catch(n){throw r(null),a(n instanceof Error?n.message:"Signature evidence unavailable"),n}}}}export{S as a,m as b,h as c,_ as s,p as u};
